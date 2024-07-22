@@ -4,7 +4,6 @@ __pycache__/
 venv/
 .env
 pyproject.toml
-charades/
-metavd/
+data/
 results/
-numberbatch-en-19.08.txt
+src/temp/
