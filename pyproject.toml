@@ -1,0 +1,50 @@
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "D100",    # undocumented-public-module
+    "D101",    # undocumented-public-class
+    "D102",    # undocumented-public-method
+    "D103",    # undocumented-public-function
+    "D104",    # undocumented-public-package
+    "D105",    # undocumented-magic-method
+    "D106",    # undocumented-public-nested-class
+    "D107",    # undocumented-public-init
+    "D203",    # one-blank-line-before-class
+    "D213",    # multi-line-summary-second-line
+    "T201",    # print
+    "ERA001",  # commented-out-code
+    "ANN",     # flake8-annotations (ANN)
+    "PLR0913", # too-many-arguments
+    "G004",    # logging-f-string
+    "COM812",  # missing-trailing-comma
+    # "RUF012",  # mutable-class-default
+    # "EM101",   # raw-string-in-exception
+    "S310",   # suspicious-url-open-usage
+    "S301",   # suspicious-pickle-usage
+    "ISC001", # single-line-implicit-string-concatenation
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/{tests,docs,tools}/**/*" = ["S101"]
+
+[tool.ruff.format]
+# skip-magic-trailing-comma = true
+docstring-code-format = true
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.isort]
+# force-single-line = true
+
+[tool.mypy]
+#warn_return_any = true
+#no_implicit_optional = true
+#disallow_untyped_calls = true
+#disallow_untyped_defs = true
+ignore_missing_imports = true
+follow_imports = "skip"
