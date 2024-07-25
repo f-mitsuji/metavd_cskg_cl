@@ -29,6 +29,11 @@ jobs:
         pip install -r requirements.txt
         python -m spacy download en_core_web_md
 
+    - name: Run Ruff (lint)
+      run: ruff check --output-format=github .
+    - name: Run Ruff (format)
+      run: ruff format . --check --diff
+
     - name: Run tests
       env:
         PYTHONPATH: ${{ github.workspace }}/src
