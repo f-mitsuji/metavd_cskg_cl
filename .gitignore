@@ -6,4 +6,5 @@ venv/
 pyproject.toml
 data/
 results/
-src/temp/
+temp/
+run_tests.sh

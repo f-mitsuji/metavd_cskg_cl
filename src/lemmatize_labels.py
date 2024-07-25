@@ -8,7 +8,6 @@ from utils import get_current_jst_timestamp, log_to_file, save_json_with_timesta
 
 timestamp = get_current_jst_timestamp()
 log_file = LOGS_DIR / f"lemmatize_labels_{timestamp}.log"
-log_file.parent.mkdir(parents=True, exist_ok=True)
 logger = setup_logger("lemmatize labels", log_file)
 
 
@@ -48,12 +47,11 @@ def process_labels(labels: list) -> dict:
     processed_data = {}
     for label in labels:
         preprocessed_label = preprocess_label(label)
-        lemmatized_tokens = lemmatize_and_remove_stopwords(preprocessed_label, nlp, stop_words)
+        lemmatized_tokens = lemmatize_and_remove_stopwords(preprocessed_label)
         processed_data[label] = lemmatized_tokens
     return processed_data
 
 
-@log_to_file(logger)
 def main(dataset: str) -> None:
     try:
         logger.info(f"Started processing dataset: {dataset}")

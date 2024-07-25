@@ -1,6 +1,7 @@
 from pathlib import Path
 
 RESULTS_DIR = Path("results")
+LOGS_DIR = RESULTS_DIR / "logs"
 
 DATA_DIR = Path("data")
 METAVD_DIR = DATA_DIR / "metavd"
@@ -12,3 +13,4 @@ GOOGLE_NEWS_PATH = EMBEDDINGS_DIR / "GoogleNews-vectors-negative300.bin"
 CN_DICT_DIR = DATA_DIR / "conceptnet"
 CN_EN_LEMMAS_P = CN_DICT_DIR / "concepts_en_lemmas.p"
 CN_DICT_P = CN_DICT_DIR / "cn_dict2.p"
+CN_DICT_DB = CN_DICT_DIR / "cn_dict2.db"
