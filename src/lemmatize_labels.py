@@ -7,6 +7,7 @@ from settings import LOGS_DIR, METAVD_DIR, RESULTS_DIR
 from utils import get_current_jst_timestamp, log_to_file, save_json_with_timestamp, setup_logger
 
 timestamp = get_current_jst_timestamp()
+LOGS_DIR.mkdir(parents=True, exist_ok=True)
 log_file = LOGS_DIR / f"lemmatize_labels_{timestamp}.log"
 logger = setup_logger("lemmatize labels", log_file)
 
@@ -16,7 +17,9 @@ stop_words = nlp.Defaults.stop_words
 
 
 def get_dataset_info(dataset: str) -> dict:
+    METAVD_DIR.mkdir(parents=True, exist_ok=True)
     csv_path = METAVD_DIR / f"{dataset}_classes.csv"
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     result_dir = RESULTS_DIR / dataset
 
     if not csv_path.exists():
