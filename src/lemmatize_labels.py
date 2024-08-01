@@ -11,7 +11,6 @@ LOGS_DIR.mkdir(parents=True, exist_ok=True)
 log_file = LOGS_DIR / f"lemmatize_labels_{timestamp}.log"
 logger = setup_logger("lemmatize labels", log_file)
 
-
 nlp = spacy.load("en_core_web_md")
 stop_words = nlp.Defaults.stop_words
 
@@ -35,24 +34,31 @@ def load_labels(file_path: Path) -> list:
 
 
 @log_to_file(logger)
-def preprocess_label(label: str) -> str:
+def normalize_label(label: str) -> str:
     return label.lower().replace("_", " ").replace("-", " ")
 
 
 @log_to_file(logger)
-def lemmatize_and_remove_stopwords(label: str) -> list:
-    doc = nlp(label)
-    return [token.lemma_ for token in doc if token.text not in stop_words and not token.is_punct]
+def lemmatize_and_filter_token(token_text: str) -> str:
+    doc = nlp(token_text)
+    for token in doc:
+        if token.lemma_ not in stop_words and not token.is_punct:
+            return token.lemma_
+    return ""
 
 
 @log_to_file(logger)
-def process_labels(labels: list) -> dict:
-    processed_data = {}
-    for label in labels:
-        preprocessed_label = preprocess_label(label)
-        lemmatized_tokens = lemmatize_and_remove_stopwords(preprocessed_label)
-        processed_data[label] = lemmatized_tokens
-    return processed_data
+def lemmatize_labels(labels: list) -> dict:
+    lemmatized_data = {}
+    for raw_label in labels:
+        normalized_label = normalize_label(raw_label)
+        lemmatized_tokens = []
+        for token in normalized_label.split():
+            lemmatized_token = lemmatize_and_filter_token(token)
+            if lemmatized_token:
+                lemmatized_tokens.append(lemmatized_token)
+        lemmatized_data[raw_label] = lemmatized_tokens
+    return lemmatized_data
 
 
 def main(dataset: str) -> None:
@@ -60,8 +66,8 @@ def main(dataset: str) -> None:
         logger.info(f"Started processing dataset: {dataset}")
         dataset_info = get_dataset_info(dataset)
         labels = load_labels(dataset_info["csv_path"])
-        processed_labels = process_labels(labels)
-        save_json_with_timestamp(processed_labels, dataset_info["result_dir"], f"{dataset}_lemmatized_labels")
+        lemmatized_labels = lemmatize_labels(labels)
+        save_json_with_timestamp(lemmatized_labels, dataset_info["result_dir"], f"{dataset}_lemmatized_labels")
         logger.info(f"Finished processing dataset: {dataset}")
     except Exception:
         logger.exception("An error occurred")
