@@ -38,7 +38,7 @@ docstring-code-format = true
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
-[tool.ruff.isort]
+[tool.ruff.lint.isort]
 # force-single-line = true
 
 [tool.mypy]
