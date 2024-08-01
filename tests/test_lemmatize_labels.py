@@ -14,8 +14,8 @@ def test_normalize_label():
 @pytest.mark.parametrize(
     ("label", "expected"),
     [
-        ("running fast", ["run", "fast"]),
-        ("jumping high", ["jump", "high"]),
+        ("running", "run"),
+        ("jumping", "jump"),
     ],
 )
 def test_lemmatize_and_filter_token(label, expected):
