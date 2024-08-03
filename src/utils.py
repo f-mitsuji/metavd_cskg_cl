@@ -1,6 +1,7 @@
 import datetime
 import json
 import logging
+import os
 from functools import wraps
 from pathlib import Path
 
@@ -48,6 +49,26 @@ def save_json_with_timestamp(data: dict, output_dir: Path, base_filename: str) -
     except OSError as e:
         print(f"Error saving JSON to {output_path}: {e}")
         raise
+
+
+def load_json(file_path):
+    try:
+        with file_path.open("r", encoding="utf-8") as f:
+            return json.load(f)
+    except OSError as e:
+        print(f"Error loading JSON from {file_path}: {e}")
+        raise
+
+
+def get_latest_file_path(directory, prefix):
+    files = [f for f in os.listdir(directory) if f.startswith(prefix) and f.endswith(".json")]
+    if not files:
+        return None
+
+    files_with_timestamps = [(f, datetime.datetime.strptime(f[len(prefix) : -5], "%Y%m%d_%H%M%S")) for f in files]
+    latest_file = max(files_with_timestamps, key=lambda x: x[1])[0]
+
+    return directory / latest_file
 
 
 def get_current_jst_timestamp() -> str:

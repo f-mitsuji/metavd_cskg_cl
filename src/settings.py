@@ -12,5 +12,5 @@ GOOGLE_NEWS_PATH = EMBEDDINGS_DIR / "GoogleNews-vectors-negative300.bin"
 
 CN_DICT_DIR = DATA_DIR / "conceptnet"
 CN_EN_LEMMAS_P = CN_DICT_DIR / "concepts_en_lemmas.p"
-CN_DICT_P = CN_DICT_DIR / "cn_dict2.p"
-CN_DICT_DB = CN_DICT_DIR / "cn_dict2.db"
+CN_DICT2_P = CN_DICT_DIR / "cn_dict2.p"
+CN_DICT2_DB = CN_DICT_DIR / "cn_dict2.db"
