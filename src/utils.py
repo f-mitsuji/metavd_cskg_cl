@@ -1,9 +1,10 @@
 import datetime
 import json
 import logging
-import os
 from functools import wraps
 from pathlib import Path
+
+JST = datetime.timezone(datetime.timedelta(hours=9))
 
 
 def setup_logger(logger_name: str, log_file: Path, level=logging.DEBUG) -> logging.Logger:
@@ -60,19 +61,20 @@ def load_json(file_path):
         raise
 
 
-def get_latest_file_path(directory, prefix):
-    files = [f for f in os.listdir(directory) if f.startswith(prefix) and f.endswith(".json")]
-    if not files:
-        return None
-
-    files_with_timestamps = [(f, datetime.datetime.strptime(f[len(prefix) : -5], "%Y%m%d_%H%M%S")) for f in files]
-    latest_file = max(files_with_timestamps, key=lambda x: x[1])[0]
-
-    return directory / latest_file
-
-
 def get_current_jst_timestamp() -> str:
     now_utc = datetime.datetime.now(tz=datetime.UTC)
-    jst = datetime.timezone(datetime.timedelta(hours=9))
-    now_jst = now_utc.astimezone(jst)
+    now_jst = now_utc.astimezone(JST)
     return now_jst.strftime("%Y%m%d_%H%M%S")
+
+
+def get_latest_file_path(directory: Path, prefix: str) -> Path:
+    files = [f for f in directory.iterdir() if f.is_file() and f.name.startswith(prefix) and f.name.endswith(".json")]
+    if not files:
+        msg = f"No files found in {directory} with prefix {prefix}"
+        raise FileNotFoundError(msg)
+
+    files_with_timestamps = [
+        (f, datetime.datetime.strptime(f.name[len(prefix) : -5], "%Y%m%d_%H%M%S").replace(tzinfo=JST)) for f in files
+    ]
+
+    return max(files_with_timestamps, key=lambda x: x[1])[0]
