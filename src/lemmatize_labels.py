@@ -41,9 +41,11 @@ def normalize_label(label: str) -> str:
 @log_to_file(logger)
 def lemmatize_and_filter_token(token_text: str) -> str:
     doc = nlp(token_text)
-    for token in doc:
-        if token.lemma_ not in stop_words and not token.is_punct:
-            return token.lemma_
+    if len(doc) == 0:
+        return ""
+    token = doc[0]
+    if token.lemma_ not in stop_words and not token.is_punct:
+        return token.lemma_
     return ""
 
 
