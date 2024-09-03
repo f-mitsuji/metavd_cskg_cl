@@ -31,46 +31,21 @@ def get_dataset_info(dataset: str) -> dict:
 
 
 @log_to_file(logger)
-def fetch_concepts_for_lemma(lemma):
-    try:
-        with sqlite3.connect(DB_PATH) as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT concepts FROM cn_dict WHERE lemma=?", (lemma,))
-            result = cursor.fetchone()
-            if result:
-                concepts = result[0].split(",")
-                return set(concepts)
-            return set()
-    except sqlite3.Error as e:
-        print(f"Database error: {e}")
-        return set()
-    except Exception as e:  # noqa: BLE001
-        print(f"Unexpected error: {e}")
-        return set()
-
-
-@log_to_file(logger)
-def fetch_common_concepts_for_lemmas(lemmas):
-    if not lemmas:
-        return set()
-
-    common_concepts = fetch_concepts_for_lemma(lemmas[0])
-    for lemma in lemmas[1:]:
-        concepts = fetch_concepts_for_lemma(lemma)
-        common_concepts &= concepts
-
-        if not common_concepts:
-            return set()
-
-    return common_concepts
-
-
 def extract_candidates(lemmatized_labels):
     extracted_candidates = {}
+    unique_lemmas = {lemma for lemmas in lemmatized_labels.values() for lemma in lemmas}
+
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        placeholders = ",".join("?" for _ in unique_lemmas)
+        cursor.execute(f"SELECT lemma, concepts FROM cn_dict WHERE lemma IN ({placeholders})", list(unique_lemmas))  # noqa: S608
+        lemma_to_concepts = {row[0]: set(row[1].split(",")) for row in cursor.fetchall()}
+
     for label, lemmas in lemmatized_labels.items():
-        common_concepts = fetch_common_concepts_for_lemmas(lemmas)
-        lemma_concepts = {lemma: list(fetch_concepts_for_lemma(lemma)) for lemma in lemmas}
+        common_concepts = set.intersection(*(lemma_to_concepts.get(lemma, set()) for lemma in lemmas))
+        lemma_concepts = {lemma: list(lemma_to_concepts.get(lemma, set())) for lemma in lemmas}
         extracted_candidates[label] = {"common_concepts": list(common_concepts), "lemma_concepts": lemma_concepts}
+
     return extracted_candidates
 
 
