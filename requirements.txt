@@ -1,11 +1,12 @@
 arrow==1.3.0
 gensim==4.3.2
 numpy==1.26.4
-openai==1.30.1
+# openai==1.30.1
 pandas==2.2.2
 pytest==8.3.1
-python-dotenv==1.0.1
+# python-dotenv==1.0.1
+spacy==3.7.5
 scikit-learn==1.5.1
 scipy==1.12.0
-spacy==3.7.5
-wordfreq==3.1.1
+sentence-transformers==4.44.2
+# wordfreq==3.1.1
