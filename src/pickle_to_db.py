@@ -1,7 +1,7 @@
 import pickle
 import sqlite3
 
-from settings import CN_DICT2_DB, CN_DICT2_P
+from src.settings import CN_DICT2_DB, CN_DICT2_P
 
 with CN_DICT2_P.open("rb") as f:
     cn_dict = pickle.load(f)

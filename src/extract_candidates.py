@@ -1,9 +1,8 @@
 import argparse
 import sqlite3
 
-from settings import CN_DICT2_DB as DB_PATH
-from settings import LOGS_DIR, RESULTS_DIR
-from utils import (
+from src.settings import CN_DICT2_DB, LOGS_DIR, RESULTS_DIR
+from src.utils import (
     get_current_jst_timestamp,
     get_latest_file_path,
     load_json,
@@ -35,7 +34,7 @@ def extract_candidates(lemmatized_labels):
     extracted_candidates = {}
     unique_lemmas = {lemma for lemmas in lemmatized_labels.values() for lemma in lemmas}
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with sqlite3.connect(CN_DICT2_DB) as conn:
         cursor = conn.cursor()
         placeholders = ",".join("?" for _ in unique_lemmas)
         cursor.execute(f"SELECT lemma, concepts FROM cn_dict WHERE lemma IN ({placeholders})", list(unique_lemmas))  # noqa: S608

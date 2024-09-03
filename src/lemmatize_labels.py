@@ -3,8 +3,9 @@ from pathlib import Path
 
 import pandas as pd
 import spacy
-from settings import LOGS_DIR, METAVD_DIR, RESULTS_DIR
-from utils import get_current_jst_timestamp, log_to_file, save_json_with_timestamp, setup_logger
+
+from src.settings import LOGS_DIR, METAVD_DIR, RESULTS_DIR
+from src.utils import get_current_jst_timestamp, log_to_file, save_json_with_timestamp, setup_logger
 
 timestamp = get_current_jst_timestamp()
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
