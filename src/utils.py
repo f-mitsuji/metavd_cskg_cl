@@ -1,15 +1,17 @@
-import datetime
 import json
 import logging
+from collections.abc import Callable
 from functools import wraps
 from pathlib import Path
+from typing import Any
 
-JST = datetime.timezone(datetime.timedelta(hours=9))
+import arrow
+
+JST = "Asia/Tokyo"
 
 
-def setup_logger(logger_name: str, log_file: Path, level=logging.DEBUG) -> logging.Logger:
+def setup_logger(logger_name: str, log_file: Path, level: int = logging.DEBUG) -> logging.Logger:
     formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-
     file_handler = logging.FileHandler(log_file)
     file_handler.setFormatter(formatter)
     file_handler.setLevel(level)
@@ -20,10 +22,10 @@ def setup_logger(logger_name: str, log_file: Path, level=logging.DEBUG) -> loggi
     return logger
 
 
-def log_to_file(logger: logging.Logger):
-    def decorator(func):
+def log_to_file(logger: logging.Logger) -> Callable:
+    def decorator(func: Callable) -> Callable:
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             logger.debug(f"Calling {func.__name__} with args: {args}, kwargs: {kwargs}")
             try:
                 result = func(*args, **kwargs)
@@ -46,13 +48,13 @@ def save_json_with_timestamp(data: dict, output_dir: Path, base_filename: str) -
     try:
         with output_path.open("w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
-        print(f"saved to {output_path}")
+        print(f"Saved to {output_path}")
     except OSError as e:
         print(f"Error saving JSON to {output_path}: {e}")
         raise
 
 
-def load_json(file_path):
+def load_json(file_path: Path) -> dict:
     try:
         with file_path.open("r", encoding="utf-8") as f:
             return json.load(f)
@@ -62,9 +64,7 @@ def load_json(file_path):
 
 
 def get_current_jst_timestamp() -> str:
-    now_utc = datetime.datetime.now(tz=datetime.UTC)
-    now_jst = now_utc.astimezone(JST)
-    return now_jst.strftime("%Y%m%d_%H%M%S")
+    return arrow.now(JST).format("YYYYMMDD_HHmmss")
 
 
 def get_latest_file_path(directory: Path, prefix: str) -> Path:
@@ -73,8 +73,4 @@ def get_latest_file_path(directory: Path, prefix: str) -> Path:
         msg = f"No files found in {directory} with prefix {prefix}"
         raise FileNotFoundError(msg)
 
-    files_with_timestamps = [
-        (f, datetime.datetime.strptime(f.name[len(prefix) : -5], "%Y%m%d_%H%M%S").replace(tzinfo=JST)) for f in files
-    ]
-
-    return max(files_with_timestamps, key=lambda x: x[1])[0]
+    return max(files, key=lambda f: arrow.get(f.name[len(prefix) : -5], "YYYYMMDD_HHmmss", tzinfo=JST))
