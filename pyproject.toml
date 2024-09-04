@@ -29,7 +29,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"**/{tests,docs,tools}/**/*" = ["S101"]
+"**/{tests,docs,tools}/**/*" = ["S101", "PLR2004"]
 
 [tool.ruff.format]
 # skip-magic-trailing-comma = true
