@@ -7,3 +7,5 @@ data/
 results/
 temp/
 run_tests.sh
+.ruff_cache/
+.pytest_cache/
