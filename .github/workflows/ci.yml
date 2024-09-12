@@ -1,10 +1,14 @@
 name: CI
 
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+# on:
+#   push:
+#     branches: [ main ]
+#     paths-ignore:
+#       - 'data/**'
+#   pull_request:
+#     branches: [ main ]
+#     paths-ignore:
+#       - 'data/**'
 
 jobs:
   build:
@@ -23,11 +27,25 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
 
+    - name: Cache pip packages
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Cache spacy models
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-spacy-${{ hashFiles('**/requirements.txt') }}
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-        python -m spacy download en_core_web_md
+        python -m spacy download en_core_web_lg
 
     - name: Run Ruff (lint)
       run: ruff check --output-format=github .
