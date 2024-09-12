@@ -9,6 +9,7 @@ name: CI
 #     branches: [ main ]
 #     paths-ignore:
 #       - 'data/**'
+  workflow_dispatch:
 
 jobs:
   build:
