@@ -34,7 +34,7 @@ root/
 - Contains two files:
   - `cn_dict2.p`
   - `concepts_en_lemmas.p`
-- These files can be downloaded from the [CoCo-Ex ConceptNet GitHub repository](https://github.com/Heidelberg-NLP/CoCo-Ex).
+- These files can be downloaded from the [CoCo-Ex GitHub repository](https://github.com/Heidelberg-NLP/CoCo-Ex).
 
 ### `data/embeddings/`
 
@@ -44,7 +44,7 @@ root/
 
 ### `data/metavd/`
 
-- Contains several class definition files for various action recognition datasets:
+- Contains seven files:
   - `activitynet_classes.csv`
   - `charades_classes.csv`
   - `hmdb51_classes.csv`
