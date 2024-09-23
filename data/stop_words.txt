@@ -10,6 +10,7 @@ be
 been
 but
 by
+do
 for
 from
 has
@@ -24,6 +25,7 @@ or
 that
 the
 to
+use
 was
 were
 will
@@ -59,6 +61,8 @@ itself
 ourselves
 yourselves
 themselves
+someone
+something
 
 # Others
 this
@@ -67,3 +71,7 @@ these
 those
 here
 there
+some
+somewhere
+es
+s
