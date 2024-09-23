@@ -1,12 +1,11 @@
 import argparse
 
 import numpy as np
-import spacy
 from gensim.models import KeyedVectors
 from scipy.spatial.distance import cosine
 from sentence_transformers import SentenceTransformer
 
-from src.settings import GOOGLENEWS_PATH, LOGS_DIR, NUMBERBATCH_PATH, RESULTS_DIR
+from src.settings import GOOGLENEWS_PATH, LOGS_DIR, NUMBERBATCH_PATH, RESULTS_DIR, STOP_WORDS
 from src.utils import (
     get_current_jst_timestamp,
     get_latest_file_path,
@@ -20,9 +19,6 @@ timestamp = get_current_jst_timestamp()
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
 log_file = LOGS_DIR / f"refined_candidates_{timestamp}.log"
 logger = setup_logger("refine candidates", log_file)
-
-nlp = spacy.load("en_core_web_md")
-stops = nlp.Defaults.stop_words
 
 
 def parse_arguments():
@@ -68,32 +64,31 @@ def tokenize_phrase(label: str) -> list[str]:
     return [word for word in words if word not in {"a", "an", "the"}]
 
 
-def compute_vector(words: list[str], model, stops: set[str], method: str) -> np.ndarray | None:
+def compute_vector(words: list[str], model, stop_words: set[str], method: str) -> np.ndarray | None:
     if method == "sentence":
         return model.encode([" ".join(words)])[0]
 
-    phrases = ["_".join(words), "_".join([word for word in words if word not in stops])]
+    phrases = ["_".join(words), "_".join([word for word in words if word not in stop_words])]
     for phrase in phrases:
         if phrase in model:
             return model[phrase]
 
-    vectors = [model[word] for word in words if word in model and word not in stops]
+    vectors = [model[word] for word in words if word in model and word not in stop_words]
     return np.mean(vectors, axis=0) if vectors else None
 
 
+@log_to_file(logger)
 def calculate_cosine_similarity(
-    source_tokens: list[str], target_tokens: list[str], model, stops: set[str], method: str
+    source_tokens: list[str], target_tokens: list[str], model, stop_words: set[str], method: str
 ) -> float:
-    source_vector = compute_vector(source_tokens, model, stops, method)
-    target_vector = compute_vector(target_tokens, model, stops, method)
-
+    source_vector = compute_vector(source_tokens, model, stop_words, method)
+    target_vector = compute_vector(target_tokens, model, stop_words, method)
     if source_vector is None or target_vector is None:
         return 0.0
 
     return 1 - cosine(source_vector, target_vector)
 
 
-@log_to_file(logger)
 def refine_candidates(processed_labels: dict, model, method: str, threshold: float):
     result = {}
     for label, data in processed_labels.items():
@@ -102,14 +97,13 @@ def refine_candidates(processed_labels: dict, model, method: str, threshold: flo
         filtered_phrases = []
         for phrase in common_phrases:
             phrase_words = tokenize_phrase(phrase)
-            similarity = calculate_cosine_similarity(label_words, phrase_words, model, stops, method)
+            similarity = calculate_cosine_similarity(label_words, phrase_words, model, STOP_WORDS, method)
             if similarity >= threshold:
                 filtered_phrases.append(phrase)
         result[label] = filtered_phrases
     return result
 
 
-@log_to_file(logger)
 def refine_candidates_multi_model(
     processed_labels: dict, numberbatch_model, googlenews_model, sentence_model, threshold: float
 ):
@@ -121,9 +115,9 @@ def refine_candidates_multi_model(
         for phrase in common_phrases:
             phrase_words = tokenize_phrase(phrase)
             similarities = [
-                calculate_cosine_similarity(label_words, phrase_words, numberbatch_model, stops, "numberbatch"),
-                calculate_cosine_similarity(label_words, phrase_words, googlenews_model, stops, "googlenews"),
-                calculate_cosine_similarity(label_words, phrase_words, sentence_model, stops, "sentence"),
+                calculate_cosine_similarity(label_words, phrase_words, numberbatch_model, STOP_WORDS, "numberbatch"),
+                calculate_cosine_similarity(label_words, phrase_words, googlenews_model, STOP_WORDS, "googlenews"),
+                calculate_cosine_similarity(label_words, phrase_words, sentence_model, STOP_WORDS, "sentence"),
             ]
             if any(sim >= threshold for sim in similarities):
                 filtered_phrases.append(phrase)

@@ -1,10 +1,11 @@
 import argparse
+import re
 from pathlib import Path
 
 import pandas as pd
 import spacy
 
-from src.settings import LOGS_DIR, METAVD_DIR, RESULTS_DIR
+from src.settings import LOGS_DIR, METAVD_DIR, RESULTS_DIR, STOP_WORDS
 from src.utils import get_current_jst_timestamp, log_to_file, save_json_with_timestamp, setup_logger
 
 timestamp = get_current_jst_timestamp()
@@ -12,8 +13,7 @@ LOGS_DIR.mkdir(parents=True, exist_ok=True)
 log_file = LOGS_DIR / f"lemmatize_labels_{timestamp}.log"
 logger = setup_logger("lemmatize labels", log_file)
 
-nlp = spacy.load("en_core_web_md")
-stop_words = nlp.Defaults.stop_words
+nlp = spacy.load("en_core_web_lg")
 
 
 def get_dataset_info(dataset: str) -> dict:
@@ -21,6 +21,7 @@ def get_dataset_info(dataset: str) -> dict:
     csv_path = METAVD_DIR / f"{dataset}_classes.csv"
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     result_dir = RESULTS_DIR / dataset
+    result_dir.mkdir(parents=True, exist_ok=True)
 
     if not csv_path.exists():
         msg = f"CSV file for dataset '{dataset}' does not exist at {csv_path}"
@@ -36,7 +37,10 @@ def load_labels(file_path: Path) -> list:
 
 @log_to_file(logger)
 def normalize_label(label: str) -> str:
-    return label.lower().replace("_", " ").replace("-", " ")
+    label = re.sub(r"\([^)]*\)", "", label)
+    label = re.sub(r"(?<!^)(?=[A-Z])", " ", label)
+    label = re.sub(r"[_\-/]", " ", label)
+    return " ".join(label.lower().split())
 
 
 @log_to_file(logger)
@@ -45,7 +49,7 @@ def lemmatize_and_filter_token(token_text: str) -> str:
     if len(doc) == 0:
         return ""
     token = doc[0]
-    if token.lemma_ not in stop_words and not token.is_punct:
+    if token.lemma_ not in STOP_WORDS and not token.is_punct:
         return token.lemma_
     return ""
 
@@ -55,12 +59,12 @@ def lemmatize_labels(labels: list) -> dict:
     lemmatized_data = {}
     for raw_label in labels:
         normalized_label = normalize_label(raw_label)
-        lemmatized_tokens = []
+        lemmatized_tokens = set()
         for token in normalized_label.split():
             lemmatized_token = lemmatize_and_filter_token(token)
             if lemmatized_token:
-                lemmatized_tokens.append(lemmatized_token)
-        lemmatized_data[raw_label] = lemmatized_tokens
+                lemmatized_tokens.add(lemmatized_token)
+        lemmatized_data[raw_label] = list(lemmatized_tokens)
     return lemmatized_data
 
 
