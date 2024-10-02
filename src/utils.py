@@ -7,8 +7,6 @@ from typing import Any
 
 import arrow
 
-JST = "Asia/Tokyo"
-
 
 def setup_logger(logger_name: str, log_file: Path, level: int = logging.DEBUG) -> logging.Logger:
     formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -64,7 +62,7 @@ def load_json(file_path: Path) -> dict:
 
 
 def get_current_jst_timestamp() -> str:
-    return arrow.now(JST).format("YYYYMMDD_HHmmss")
+    return arrow.now("Asia/Tokyo").format("YYYYMMDD_HHmmss")
 
 
 def get_latest_file_path(directory: Path, prefix: str) -> Path:
@@ -73,4 +71,4 @@ def get_latest_file_path(directory: Path, prefix: str) -> Path:
         msg = f"No files found in {directory} with prefix {prefix}"
         raise FileNotFoundError(msg)
 
-    return max(files, key=lambda f: arrow.get(f.name[len(prefix) : -5], "YYYYMMDD_HHmmss", tzinfo=JST))
+    return max(files, key=lambda f: arrow.get(f.name[len(prefix) : -5], "YYYYMMDD_HHmmss", tzinfo="Asia/Tokyo"))
