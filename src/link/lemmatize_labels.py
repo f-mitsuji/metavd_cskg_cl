@@ -15,6 +15,8 @@ logger = setup_logger("lemmatize labels", log_file)
 
 nlp = spacy.load("en_core_web_lg")
 
+CUSTOM_LEMMAS = {"opening": "open", "closing": "close", "fixing": "fix", "welding": "weld", "diving": "dive"}
+
 
 def get_dataset_info(dataset: str) -> dict:
     METAVD_DIR.mkdir(parents=True, exist_ok=True)
@@ -37,6 +39,9 @@ def load_labels(file_path: Path) -> list:
 
 @log_to_file(logger)
 def normalize_label(label: str) -> str:
+    if label.isupper():
+        return label.lower()
+
     label = re.sub(r"\([^)]*\)", "", label)
     label = re.sub(r"(?<!^)(?=[A-Z])", " ", label)
     label = re.sub(r"[_\-/]", " ", label)
@@ -45,6 +50,9 @@ def normalize_label(label: str) -> str:
 
 @log_to_file(logger)
 def lemmatize_and_filter_token(token_text: str) -> str:
+    if token_text in CUSTOM_LEMMAS:
+        return CUSTOM_LEMMAS[token_text]
+
     doc = nlp(token_text)
     if len(doc) == 0:
         return ""
@@ -86,10 +94,17 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dataset",
         type=str,
-        required=True,
+        nargs="*",
         choices=["activitynet", "charades", "hmdb51", "kinetics700", "stair_actions", "ucf101"],
-        help="The name of the dataset to process.",
+        help="The name(s) of the dataset(s) to process. If not specified, all datasets will be processed.",
     )
     args = parser.parse_args()
 
-    main(args.dataset)
+    datasets = (
+        args.dataset
+        if args.dataset
+        else ["activitynet", "charades", "hmdb51", "kinetics700", "stair_actions", "ucf101"]
+    )
+
+    for dataset in datasets:
+        main(dataset)
