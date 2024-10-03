@@ -24,7 +24,7 @@ def get_dataset_info(dataset: str) -> dict:
 
     if not lemmatized_labels_path.exists():
         msg = f"JSON file for dataset '{dataset}' does not exist at {lemmatized_labels_path}"
-        raise ValueError(msg)
+        raise FileNotFoundError(msg)
 
     return {"lemmatized_labels_path": lemmatized_labels_path, "result_dir": result_dir}
 
@@ -37,13 +37,13 @@ def extract_candidates(lemmatized_labels):
     with sqlite3.connect(CN_DICT2_DB) as conn:
         cursor = conn.cursor()
         placeholders = ",".join("?" for _ in unique_lemmas)
-        cursor.execute(f"SELECT lemma, concepts FROM cn_dict WHERE lemma IN ({placeholders})", list(unique_lemmas))  # noqa: S608
+        cursor.execute(f"SELECT lemma, concepts FROM cn_dict WHERE lemma IN ({placeholders})", list(unique_lemmas))
         lemma_to_concepts = {row[0]: set(row[1].split(",")) for row in cursor.fetchall()}
 
     for label, lemmas in lemmatized_labels.items():
-        common_concepts = set.intersection(*(lemma_to_concepts.get(lemma, set()) for lemma in lemmas))
-        lemma_concepts = {lemma: list(lemma_to_concepts.get(lemma, set())) for lemma in lemmas}
-        extracted_candidates[label] = {"common_concepts": list(common_concepts), "lemma_concepts": lemma_concepts}
+        # common_concepts = set.intersection(*(lemma_to_concepts.get(lemma, set()) for lemma in lemmas))
+        union_concepts = set.union(*(lemma_to_concepts.get(lemma, set()) for lemma in lemmas))
+        extracted_candidates[label] = list(union_concepts)
 
     return extracted_candidates
 
@@ -62,14 +62,21 @@ def main(dataset: str) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Process action labels for a specified dataset.")
+    parser = argparse.ArgumentParser(description="Process action labels for specified datasets.")
     parser.add_argument(
         "--dataset",
         type=str,
-        required=True,
+        nargs="*",
         choices=["activitynet", "charades", "hmdb51", "kinetics700", "stair_actions", "ucf101"],
-        help="The name of the dataset to process.",
+        help="The name(s) of the dataset(s) to process. If not specified, all datasets will be processed.",
     )
     args = parser.parse_args()
 
-    main(args.dataset)
+    datasets = (
+        args.dataset
+        if args.dataset
+        else ["activitynet", "charades", "hmdb51", "kinetics700", "stair_actions", "ucf101"]
+    )
+
+    for dataset in datasets:
+        main(dataset)
