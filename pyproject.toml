@@ -26,6 +26,8 @@ ignore = [
     "S310",   # suspicious-url-open-usage
     "S301",   # suspicious-pickle-usage
     "ISC001", # single-line-implicit-string-concatenation
+    "S311",   # suspicious-non-cryptographic-random-usage
+    "S608",   # hardcoded-sql-expression
 ]
 
 [tool.ruff.lint.per-file-ignores]
