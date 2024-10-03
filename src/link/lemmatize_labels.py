@@ -27,8 +27,7 @@ def get_dataset_info(dataset: str) -> dict:
 
     if not csv_path.exists():
         msg = f"CSV file for dataset '{dataset}' does not exist at {csv_path}"
-        raise ValueError(msg)
-
+        raise FileNotFoundError(msg)
     return {"csv_path": csv_path, "result_dir": result_dir}
 
 
@@ -90,7 +89,7 @@ def main(dataset: str) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Process action labels for a specified dataset.")
+    parser = argparse.ArgumentParser(description="Process action labels for specified datasets.")
     parser.add_argument(
         "--dataset",
         type=str,
