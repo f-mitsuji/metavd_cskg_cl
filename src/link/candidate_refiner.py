@@ -62,6 +62,7 @@ def get_dataset_info(dataset: str) -> dict:
 
 
 def tokenize_phrase(label: str) -> list[str]:
+    label = re.sub(r"\([^)]*\)", "", label)
     words = re.split(r"[ \-_]", label.lower())
     return [word for word in words if word not in {"a", "an", "the"}]
 
