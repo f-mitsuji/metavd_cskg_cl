@@ -17,8 +17,12 @@ root/
 │   │   ├── metavd_v1.csv
 │   │   ├── stair_actions_classes.csv
 │   │   └── ucf101_classes.csv
+│   ├── models/
+│   │   └── wiki_unigrams.bin
 │   └── stop_words.txt
 ├── results/
+│   └── ...
+├── sent2vec/
 │   └── ...
 ├── src/
 │   └── ...

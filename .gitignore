@@ -10,3 +10,4 @@ run_tests.sh
 .ruff_cache/
 .pytest_cache/
 !data/stop_words.txt
+sent2vec/
