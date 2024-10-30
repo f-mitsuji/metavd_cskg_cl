@@ -15,7 +15,15 @@ logger = setup_logger("lemmatize labels", log_file)
 
 nlp = spacy.load("en_core_web_lg")
 
-CUSTOM_LEMMAS = {"opening": "open", "closing": "close", "fixing": "fix", "welding": "weld", "diving": "dive"}
+CUSTOM_LEMMAS = {
+    "opening": "open",
+    "closing": "close",
+    "fixing": "fix",
+    "welding": "weld",
+    "diving": "dive",
+    "building": "build",
+    "smoking": "smoke",
+}
 
 
 def get_dataset_info(dataset: str) -> dict:
@@ -49,14 +57,15 @@ def normalize_label(label: str) -> str:
 
 @log_to_file(logger)
 def lemmatize_and_filter_token(token_text: str) -> str:
-    if token_text in CUSTOM_LEMMAS:
-        return CUSTOM_LEMMAS[token_text]
-
+    # filtered_pos = {"DET", "PRON", "CCONJ", "SCONJ", "INTJ", "PUNCT"}
     doc = nlp(token_text)
     if len(doc) == 0:
         return ""
     token = doc[0]
     if token.lemma_ not in STOP_WORDS and not token.is_punct:
+        # if token.lemma_ not in STOP_WORDS and token.pos_ not in filtered_pos:
+        if token.lemma_ in CUSTOM_LEMMAS:
+            return CUSTOM_LEMMAS[token.lemma_]
         return token.lemma_
     return ""
 
@@ -64,14 +73,14 @@ def lemmatize_and_filter_token(token_text: str) -> str:
 @log_to_file(logger)
 def lemmatize_labels(labels: list) -> dict:
     lemmatized_data = {}
-    for raw_label in labels:
-        normalized_label = normalize_label(raw_label)
+    for label in labels:
+        normalized_label = normalize_label(label)
         lemmatized_tokens = set()
         for token in normalized_label.split():
             lemmatized_token = lemmatize_and_filter_token(token)
             if lemmatized_token:
                 lemmatized_tokens.add(lemmatized_token)
-        lemmatized_data[raw_label] = list(lemmatized_tokens)
+        lemmatized_data[label] = list(lemmatized_tokens)
     return lemmatized_data
 
 
