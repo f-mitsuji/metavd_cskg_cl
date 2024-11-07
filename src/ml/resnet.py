@@ -1,7 +1,7 @@
 import logging
 import random
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Literal, TypeAlias, TypeVar
 
@@ -11,7 +11,7 @@ from torch import nn, optim
 from torch.utils.data import DataLoader, Dataset
 from torchvision.io import read_video
 from torchvision.models.video import R2Plus1D_18_Weights, r2plus1d_18
-from torchvision.transforms.v2 import CenterCrop, Compose, Normalize, RandomCrop, Resize
+from torchvision.transforms.v2 import CenterCrop, Compose, Normalize, RandomCrop, Resize, ToDtype
 
 from src.settings import HMDB51_DIR, LOGS_DIR, METAVD_DIR, STAIR_ACTIONS_DIR, TRAINED_MODELS_DIR, UCF101_DIR
 from src.utils import get_current_jst_timestamp, setup_logger
@@ -20,7 +20,6 @@ from src.utils import get_current_jst_timestamp, setup_logger
 SplitType: TypeAlias = Literal["train", "test", "val"]
 T = TypeVar("T")
 
-# データセットのパスを管理する辞書
 DATASET_PATHS = {
     "activitynet": {
         "root": None,
@@ -51,15 +50,13 @@ DATASET_PATHS = {
 
 @dataclass(frozen=True)
 class ExperimentConfig:
-    """実験全体の設定."""
-
     target_dataset: str
     source_datasets: list[str]
     sampling_frames: int = 16
     batch_size: int = 32
     num_workers: int = 16
     pin_memory: bool = True
-    # 学習関連の設定
+
     epochs: int = 45
     warmup_epochs: int = 10
     initial_lr: float = 0.001
@@ -68,45 +65,38 @@ class ExperimentConfig:
 
 
 class VideoProcessor:
-    """動画の前処理を行うクラス."""
-
     @staticmethod
     def create_transforms(*, is_train: bool) -> Compose:
-        """データ変換処理の作成."""
+        # R2Plus1D_18_Weights.KINETICS400_V1.transforms()
         transforms = [
             Resize((128, 171)),
             RandomCrop((112, 112)) if is_train else CenterCrop((112, 112)),
+            ToDtype(torch.float32, scale=True),
             Normalize(mean=[0.43216, 0.394666, 0.37645], std=[0.22803, 0.22145, 0.216989]),
         ]
         return Compose(transforms)
 
     @staticmethod
     def sample_frames(video: torch.Tensor, num_frames: int, *, is_train: bool) -> torch.Tensor:
-        """フレームのサンプリング."""
-        total_frames = video.size(1)  # Tの次元
+        total_frames = video.size(0)  # Tの次元(T,H,W,C)
 
         if total_frames < num_frames:
-            # フレーム数が足りない場合はループで補完
             indices: list[int] = []
             while len(indices) < num_frames:
                 indices.extend(range(total_frames))
             indices = indices[:num_frames]
         elif is_train:
-            # ランダムな位置から開始
             start_frame = random.randint(0, total_frames - num_frames)
             indices = list(range(start_frame, start_frame + num_frames))
         else:
-            # 中央のフレームを取得
             center_frame = total_frames // 2
             start_frame = center_frame - (num_frames // 2)
             indices = list(range(start_frame, start_frame + num_frames))
 
-        return video[:, indices]  # (C, T, H, W)
+        return video[indices]  # (T,H,W,C)
 
 
 class ActionLabelMapper:
-    """データセット間のラベルマッピングを管理."""
-
     def __init__(self, mapping_file: Path):
         self.mapping_file = mapping_file
         # (target_dataset, target_action) -> list[(source_dataset, source_action)]
@@ -115,12 +105,10 @@ class ActionLabelMapper:
         self.reverse_mapping: dict[tuple[str, str], str] = {}
 
     def load_mapping(self, target_dataset: str) -> None:
-        """マッピング情報の読み込み."""
         mapping_df = pd.read_csv(self.mapping_file)
         self.mapping.clear()
         self.reverse_mapping.clear()
 
-        # ターゲットデータセットがfrom_datasetにある行を探す
         target_actions = mapping_df[mapping_df["from_dataset"] == target_dataset]
 
         for _, row in target_actions.iterrows():
@@ -142,8 +130,6 @@ class ActionLabelMapper:
 
 
 class ActionRecognitionDataset(Dataset):
-    """行動認識データセットの基底クラス."""
-
     def __init__(
         self,
         dataset_name: str,
@@ -175,7 +161,6 @@ class ActionRecognitionDataset(Dataset):
         self._setup_dataset()
 
     def _setup_dataset(self) -> None:
-        """データセットの初期化(サブクラスで実装)."""
         raise NotImplementedError
 
     def __len__(self) -> int:
@@ -197,27 +182,17 @@ class ActionRecognitionDataset(Dataset):
             return video, label_idx
 
     def _preprocess_video(self, video: torch.Tensor) -> torch.Tensor:
-        """動画の前処理."""
-        # uint8からfloat32に変換 (0-255 -> 0-1)
-        video = video.float() / 255.0
-
-        # NHWC -> NCTHW -> CTHW
-        video = video.permute(3, 0, 1, 2)  # (C, T, H, W)
-
-        # フレームのサンプリング
         video = VideoProcessor.sample_frames(video, self.sampling_frames, is_train=self.is_train)
 
         if self.transform:
-            # トランスフォームは (T, C, H, W) を期待するので変換
-            video = video.permute(1, 0, 2, 3)  # (T, C, H, W)
-            video = self.transform(video)
-            # 戻す
-            video = video.permute(1, 0, 2, 3)  # (C, T, H, W)
+            # transforms用に(T,H,W,C)->(T,C,H,W)に変換
+            video = video.permute(0, 3, 1, 2)  # (T,C,H,W)
+            video = self.transform(video)  # (T,C,H,W)
+            video = video.permute(1, 0, 2, 3)  # (C,T,H,W)
 
         return video
 
     def _log_video_load(self, video_path: Path, label: str, original_label: str | None = None) -> None:
-        """動画の読み込みをログ."""
         if not self.logger:
             return
 
@@ -243,7 +218,6 @@ class CharadesDataset(ActionRecognitionDataset):
 
 class HMDB51Dataset(ActionRecognitionDataset):
     def _setup_dataset(self) -> None:
-        """データセットの初期化."""
         split_mapping = {"train": 1, "test": 2, "val": 0}
 
         for class_folder in self.root_path.iterdir():
@@ -289,7 +263,6 @@ class STAIRActionsDataset(ActionRecognitionDataset):
 
 class UCF101Dataset(ActionRecognitionDataset):
     def _setup_dataset(self) -> None:
-        """データセットの初期化."""
         split_file = self.split_path / f"{self.split}list01.txt"
         if not split_file.exists():
             msg = f"Split file not found: {split_file}"
@@ -323,13 +296,7 @@ class UCF101Dataset(ActionRecognitionDataset):
 
 
 class UnifiedActionDataset(Dataset):
-    """複数データセットを統合するデータセット."""
-
-    def __init__(
-        self,
-        target_dataset: ActionRecognitionDataset,
-        source_datasets: Sequence[ActionRecognitionDataset],
-    ):
+    def __init__(self, target_dataset: ActionRecognitionDataset, source_datasets: Sequence[ActionRecognitionDataset]):
         self.target_dataset = target_dataset
         self.source_datasets = source_datasets
 
@@ -360,8 +327,6 @@ class UnifiedActionDataset(Dataset):
 
 
 class ActionRecognitionTrainer:
-    """行動認識モデルの学習を管理."""
-
     def __init__(
         self,
         model: nn.Module,
@@ -408,20 +373,16 @@ class ActionRecognitionTrainer:
             if self.logger:
                 self.logger.info(f"\nEpoch {epoch}/{self.config.epochs}")
 
-            # 訓練
             train_loss, train_acc = self._train_epoch()
             if self.logger:
                 self.logger.info(f"Train Loss: {train_loss:.3f} | Train Acc: {train_acc:.2f}%")
 
-            # 検証
             val_loss, val_acc = self._validate()
             if self.logger:
                 self.logger.info(f"Val Loss: {val_loss:.3f} | Val Acc: {val_acc:.2f}%")
 
-            # スケジューラの更新
             self.scheduler.step()
 
-            # モデルの保存
             if epoch == self.config.epochs:
                 self._save_model("final", val_acc, epoch)
 
@@ -472,22 +433,45 @@ class ActionRecognitionTrainer:
 
         return loss.item(), correct, total
 
+    def _create_experiment_name(self, name: str, epoch: int, acc: float, timestamp: str) -> str:
+        target = self.config.target_dataset
+
+        source = "-".join(sorted(self.config.source_datasets)) if self.config.source_datasets else "no_source"
+
+        params = [f"e{epoch}", f"b{self.config.batch_size}", f"lr{self.config.initial_lr}", f"acc{acc:.2f}"]
+
+        if self.config.warmup_epochs > 0:
+            params.append(f"warm{self.config.warmup_epochs}")
+
+        params_str = "_".join(params)
+
+        return f"{target}_from_{source}_{params_str}_{timestamp}_{name}"
+
     def _save_model(self, name: str, acc: float, epoch: int) -> None:
         if self.logger:
             self.logger.info(f"Saving {name} model..")
+
+        timestamp = get_current_jst_timestamp()
+        experiment_name = self._create_experiment_name(name=name, epoch=epoch, acc=acc, timestamp=timestamp)
 
         state = {
             "model": self.model.state_dict(),
             "acc": acc,
             "epoch": epoch,
+            "config": asdict(self.config),
+            "timestamp": get_current_jst_timestamp(),
+            "optimizer": self.optimizer.state_dict(),
+            "scheduler": self.scheduler.state_dict() if self.scheduler else None,
         }
 
-        save_path = self.save_dir / f"{name}_model.pth"
+        save_path = self.save_dir / f"{experiment_name}_{name}.pth"
         torch.save(state, save_path)
+
+        if self.logger:
+            self.logger.info(f"Model saved to {save_path}")
 
 
 def get_dataset_class(name: str) -> type[ActionRecognitionDataset]:
-    """データセット名からデータセットクラスを取得."""
     dataset_mapping = {
         "activitynet": ActivityNetDataset,
         "charades": CharadesDataset,
@@ -503,25 +487,18 @@ def get_dataset_class(name: str) -> type[ActionRecognitionDataset]:
 
 
 def create_experiment(
-    config: ExperimentConfig,
-    metavd_path: Path,
-    logger: logging.Logger | None = None,
+    config: ExperimentConfig, metavd_path: Path, logger: logging.Logger | None = None
 ) -> tuple[ActionRecognitionTrainer, dict]:
-    """実験環境の作成."""
-    # デバイスの設定
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if logger:
         logger.info(f"Using device: {device}")
 
-    # ラベルマッピングの作成
     label_mapper = ActionLabelMapper(metavd_path)
     label_mapper.load_mapping(config.target_dataset)
 
-    # トランスフォームの作成
     train_transform = VideoProcessor.create_transforms(is_train=True)
     val_transform = VideoProcessor.create_transforms(is_train=False)
 
-    # ターゲットデータセットの作成
     target_paths = DATASET_PATHS[config.target_dataset]
     dataset_class = get_dataset_class(config.target_dataset)
 
@@ -549,7 +526,6 @@ def create_experiment(
         logger=logger,
     )
 
-    # ソースデータセットの作成
     source_train_datasets = []
     for source_name in config.source_datasets:
         source_paths = DATASET_PATHS[source_name]
@@ -568,10 +544,8 @@ def create_experiment(
         )
         source_train_datasets.append(source_dataset)
 
-    # 統合データセット
     unified_train_dataset = UnifiedActionDataset(target_train_dataset, source_train_datasets)
 
-    # データローダーの作成
     train_loader = DataLoader(
         unified_train_dataset,
         batch_size=config.batch_size,
@@ -588,7 +562,6 @@ def create_experiment(
         pin_memory=config.pin_memory,
     )
 
-    # モデルの作成
     num_classes = len(target_train_dataset.label_to_idx)
     model = r2plus1d_18(weights=R2Plus1D_18_Weights.KINETICS400_V1)
     model.fc = nn.Linear(model.fc.in_features, num_classes)
@@ -596,7 +569,6 @@ def create_experiment(
     nn.init.constant_(model.fc.bias, 0)
     model = model.to(device)
 
-    # トレーナーの作成
     trainer = ActionRecognitionTrainer(
         model=model,
         train_loader=train_loader,
@@ -618,26 +590,23 @@ def create_experiment(
 
 
 def main():
-    # ロガーの設定
     timestamp = get_current_jst_timestamp()
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
-    log_file = LOGS_DIR / f"training_{timestamp}.log"
-    logger = setup_logger("video_training", log_file)
+    log_file = LOGS_DIR / f"resnet_{timestamp}.log"
+    logger = setup_logger("resnet", log_file)
     logger.info("Starting training script")
 
     config = ExperimentConfig(
-        # target_dataset="ucf101",
-        target_dataset="hmdb51",
+        target_dataset="ucf101",
+        # target_dataset="hmdb51",
         # source_datasets=["hmdb51"],
         source_datasets=[],
     )
 
-    # 実験の実行
-    trainer, metadata = create_experiment(
-        config=config,
-        metavd_path=METAVD_DIR / "metavd_v1.csv",
-        logger=logger,
-    )
+    logger.info(f"Target dataset: {config.target_dataset}")
+    logger.info(f"Source datasets: {config.source_datasets}")
+
+    trainer, metadata = create_experiment(config=config, metavd_path=METAVD_DIR / "metavd_v1.csv", logger=logger)
 
     if logger:
         logger.info("Experiment metadata:")
