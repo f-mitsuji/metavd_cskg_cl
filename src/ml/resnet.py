@@ -3,7 +3,6 @@ import random
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Literal, TypeAlias, TypeVar
 
 import pandas as pd
 import torch
@@ -11,14 +10,10 @@ from torch import nn, optim
 from torch.utils.data import DataLoader, Dataset
 from torchvision.io import read_video
 from torchvision.models.video import R2Plus1D_18_Weights, r2plus1d_18
-from torchvision.transforms.v2 import CenterCrop, Compose, Normalize, RandomCrop, Resize, ToDtype
+from torchvision.transforms import InterpolationMode, v2
 
 from src.settings import HMDB51_DIR, LOGS_DIR, METAVD_DIR, STAIR_ACTIONS_DIR, TRAINED_MODELS_DIR, UCF101_DIR
 from src.utils import get_current_jst_timestamp, setup_logger
-
-# Type Aliases
-SplitType: TypeAlias = Literal["train", "test", "val"]
-T = TypeVar("T")
 
 DATASET_PATHS = {
     "activitynet": {
@@ -56,7 +51,6 @@ class ExperimentConfig:
     batch_size: int = 32
     num_workers: int = 16
     pin_memory: bool = True
-
     epochs: int = 45
     warmup_epochs: int = 10
     initial_lr: float = 0.001
@@ -66,15 +60,15 @@ class ExperimentConfig:
 
 class VideoProcessor:
     @staticmethod
-    def create_transforms(*, is_train: bool) -> Compose:
+    def create_transforms(*, is_train: bool) -> v2.Compose:
         # R2Plus1D_18_Weights.KINETICS400_V1.transforms()
         transforms = [
-            Resize((128, 171)),
-            RandomCrop((112, 112)) if is_train else CenterCrop((112, 112)),
-            ToDtype(torch.float32, scale=True),
-            Normalize(mean=[0.43216, 0.394666, 0.37645], std=[0.22803, 0.22145, 0.216989]),
+            v2.Resize((128, 171), interpolation=InterpolationMode.BILINEAR),
+            v2.RandomCrop((112, 112)) if is_train else v2.CenterCrop((112, 112)),
+            v2.ToDtype(torch.float32, scale=True),
+            v2.Normalize(mean=[0.43216, 0.394666, 0.37645], std=[0.22803, 0.22145, 0.216989]),
         ]
-        return Compose(transforms)
+        return v2.Compose(transforms)
 
     @staticmethod
     def sample_frames(video: torch.Tensor, num_frames: int, *, is_train: bool) -> torch.Tensor:
@@ -140,7 +134,7 @@ class ActionRecognitionDataset(Dataset):
         label_mapper: ActionLabelMapper,
         *,
         is_target: bool,
-        transform: Compose | None = None,
+        transform: v2.Compose | None = None,
         logger: logging.Logger | None = None,
     ):
         self.dataset_name = dataset_name
@@ -464,7 +458,7 @@ class ActionRecognitionTrainer:
             "scheduler": self.scheduler.state_dict() if self.scheduler else None,
         }
 
-        save_path = self.save_dir / f"{experiment_name}_{name}.pth"
+        save_path = self.save_dir / f"{experiment_name}.pth"
         torch.save(state, save_path)
 
         if self.logger:
@@ -592,19 +586,17 @@ def create_experiment(
 def main():
     timestamp = get_current_jst_timestamp()
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
-    log_file = LOGS_DIR / f"resnet_{timestamp}.log"
+    log_file = LOGS_DIR / f"action_recognition_{timestamp}.log"
     logger = setup_logger("resnet", log_file)
     logger.info("Starting training script")
 
     config = ExperimentConfig(
         target_dataset="ucf101",
         # target_dataset="hmdb51",
-        # source_datasets=["hmdb51"],
-        source_datasets=[],
+        source_datasets=["hmdb51"],
+        # source_datasets=[],
+        # source_datasets=["ucf101"],
     )
-
-    logger.info(f"Target dataset: {config.target_dataset}")
-    logger.info(f"Source datasets: {config.source_datasets}")
 
     trainer, metadata = create_experiment(config=config, metavd_path=METAVD_DIR / "metavd_v1.csv", logger=logger)
 
