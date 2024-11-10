@@ -82,20 +82,23 @@ class ActionLabelMapper:
 
 
 class VideoProcessor:
-    @staticmethod
-    def create_transforms(*, is_train: bool) -> v2.Compose:
+    def __init__(self, sampling_frames: int, *, is_train: bool):
+        self.sampling_frames = sampling_frames
+        self.is_train = is_train
+        self.transform = self._create_transforms()
+
+    def _create_transforms(self) -> v2.Compose:
         # R2Plus1D_18_Weights.KINETICS400_V1.transforms()
         transforms = [
             v2.Resize((128, 171), interpolation=InterpolationMode.BILINEAR, antialias=True),
-            v2.RandomCrop((112, 112)) if is_train else v2.CenterCrop((112, 112)),
+            v2.RandomCrop((112, 112)) if self.is_train else v2.CenterCrop((112, 112)),
             v2.ToDtype(torch.float32, scale=True),
             # Normalize with mean and std from Kinetics400 dataset
             v2.Normalize(mean=[0.43216, 0.394666, 0.37645], std=[0.22803, 0.22145, 0.216989]),
         ]
         return v2.Compose(transforms)
 
-    @staticmethod
-    def load_video(video_info: VideoInfo, num_frames: int, *, is_train: bool) -> torch.Tensor:
+    def load_video(self, video_info: VideoInfo) -> torch.Tensor:
         if video_info.start_time is not None and video_info.end_time is not None:
             video, _, _ = read_video(
                 str(video_info.path),
@@ -107,26 +110,26 @@ class VideoProcessor:
         else:
             video, _, _ = read_video(str(video_info.path), pts_unit="sec", output_format="TCHW")
 
-        return VideoProcessor.sample_frames(video, num_frames, is_train=is_train)
+        return self._sample_frames(video)
 
-    @staticmethod
-    def sample_frames(video: torch.Tensor, num_frames: int, *, is_train: bool) -> torch.Tensor:
+    def _sample_frames(self, video: torch.Tensor) -> torch.Tensor:
         total_frames = video.size(0)
 
-        if total_frames < num_frames:
+        if total_frames < self.sampling_frames:
             indices: list[int] = []
-            while len(indices) < num_frames:
+            while len(indices) < self.sampling_frames:
                 indices.extend(range(total_frames))
-            indices = indices[:num_frames]
-        elif is_train:
-            start_frame = random.randint(0, total_frames - num_frames)
-            indices = list(range(start_frame, start_frame + num_frames))
+            indices = indices[: self.sampling_frames]
+        elif self.is_train:
+            start_frame = random.randint(0, total_frames - self.sampling_frames)
+            indices = list(range(start_frame, start_frame + self.sampling_frames))
         else:
             center_frame = total_frames // 2
-            start_frame = center_frame - (num_frames // 2)
-            indices = list(range(start_frame, start_frame + num_frames))
+            start_frame = center_frame - (self.sampling_frames // 2)
+            indices = list(range(start_frame, start_frame + self.sampling_frames))
 
-        return video[indices]
+        sampled_video = video[indices]
+        return self.transform(sampled_video)
 
 
 class ActionRecognitionDataset(Dataset, ABC):
@@ -152,6 +155,7 @@ class ActionRecognitionDataset(Dataset, ABC):
         self.label_to_idx: dict[str, int] = {}
 
         self._setup_dataset()
+        self.video_processor = VideoProcessor(sampling_frames, is_train=self.is_train)
 
     @property
     @abstractmethod
@@ -207,17 +211,12 @@ class ActionRecognitionDataset(Dataset, ABC):
         label_idx = self.label_to_idx[video_info.label]
 
         try:
-            video = VideoProcessor.load_video(video_info, self.sampling_frames, is_train=self.is_train)
-            transform = VideoProcessor.create_transforms(is_train=self.is_train)
-            video = transform(video)
-            video = video.permute(1, 0, 2, 3)  # (C,T,H,W)
+            video = self.video_processor.load_video(video_info)
+            video = video.permute(1, 0, 2, 3)  # R(2+1)D-18 expects CTHW format
 
         except Exception:
             if self.logger:
-                time_info = ""
-                if video_info.start_time is not None:
-                    time_info = f" (time range: {video_info.start_time:.2f}-{video_info.end_time:.2f})"
-                self.logger.exception(f"Error loading video {idx}: {video_info.path}{time_info}")
+                self.logger.exception(f"Error loading video {idx}: {video_info.path}")
             raise
 
         return video, label_idx
@@ -592,6 +591,10 @@ class ActionRecognitionTrainer:
             if self.logger:
                 self.logger.info(f"\nEpoch {epoch+1}/{self.config.training.epochs}")
 
+            current_lr = self.optimizer.param_groups[0]["lr"]
+            if self.logger:
+                self.logger.info(f"Current Learning Rate: {current_lr:.6f}")
+
             train_loss, train_acc = self._train_epoch()
             if self.logger:
                 self.logger.info(f"Train Loss: {train_loss:.3f} | Train Acc: {train_acc:.2f}%")
@@ -600,9 +603,6 @@ class ActionRecognitionTrainer:
             if self.logger:
                 self.logger.info(f"Val Loss: {val_loss:.3f} | Val Acc: {val_acc:.2f}%")
 
-            current_lr = self.optimizer.param_groups[0]["lr"]
-            if self.logger:
-                self.logger.info(f"Current Learning Rate: {current_lr:.6f}")
             self.scheduler.step()
 
             if epoch == self.config.training.epochs - 1:
@@ -617,7 +617,7 @@ def get_dataset_class(name: str) -> type[ActionRecognitionDataset]:
     dataset_mapping = {
         "activitynet": ActivityNetDataset,
         "charades": CharadesDataset,
-        "kinetics-700-2020": Kinetics7002020Dataset,
+        "kinetics700-2020": Kinetics7002020Dataset,
         "hmdb51": HMDB51Dataset,
         "stair_actions": STAIRActionsDataset,
         "ucf101": UCF101Dataset,
