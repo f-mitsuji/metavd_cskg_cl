@@ -3,7 +3,7 @@ import logging
 import random
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 import pandas as pd
@@ -19,18 +19,28 @@ from src.utils import get_current_jst_timestamp, setup_logger
 
 
 @dataclass(frozen=True)
-class ExperimentConfig:
-    target_dataset: str
-    source_datasets: list[str]
-    sampling_frames: int = 16
-    batch_size: int = 32
-    num_workers: int = 16
-    pin_memory: bool = True
+class TrainingConfig:
     epochs: int = 45
     warmup_epochs: int = 10
     initial_lr: float = 0.001
     momentum: float = 0.9
     weight_decay: float = 1e-4
+
+
+@dataclass(frozen=True)
+class DataConfig:
+    sampling_frames: int = 16
+    batch_size: int = 32
+    num_workers: int = 16
+    pin_memory: bool = True
+
+
+@dataclass(frozen=True)
+class ExperimentConfig:
+    target_dataset: str
+    source_datasets: list[str]
+    training: TrainingConfig = field(default_factory=TrainingConfig)
+    data: DataConfig = field(default_factory=DataConfig)
 
 
 @dataclass
@@ -483,16 +493,16 @@ class ActionRecognitionTrainer:
     def _create_optimizer(self) -> optim.Optimizer:
         return optim.SGD(
             self.model.parameters(),
-            lr=self.config.initial_lr,
-            momentum=self.config.momentum,
-            weight_decay=self.config.weight_decay,
+            lr=self.config.training.initial_lr,
+            momentum=self.config.training.momentum,
+            weight_decay=self.config.training.weight_decay,
         )
 
     def _create_scheduler(self) -> optim.lr_scheduler.LRScheduler:
         def warmup_schedule(epoch: int) -> float:
-            if epoch < self.config.warmup_epochs:
-                return (epoch + 1) / self.config.warmup_epochs
-            return 0.1 ** ((epoch - self.config.warmup_epochs) // 10)
+            if epoch < self.config.training.warmup_epochs:
+                return (epoch + 1) / self.config.training.warmup_epochs
+            return 0.1 ** ((epoch - self.config.training.warmup_epochs) // 10)
 
         return optim.lr_scheduler.LambdaLR(self.optimizer, warmup_schedule)
 
@@ -578,9 +588,9 @@ class ActionRecognitionTrainer:
         best_acc = 0.0
         self.save_dir.mkdir(parents=True, exist_ok=True)
 
-        for epoch in range(self.config.epochs):
+        for epoch in range(self.config.training.epochs):
             if self.logger:
-                self.logger.info(f"\nEpoch {epoch+1}/{self.config.epochs}")
+                self.logger.info(f"\nEpoch {epoch+1}/{self.config.training.epochs}")
 
             train_loss, train_acc = self._train_epoch()
             if self.logger:
@@ -595,7 +605,7 @@ class ActionRecognitionTrainer:
                 self.logger.info(f"Current Learning Rate: {current_lr:.6f}")
             self.scheduler.step()
 
-            if epoch == self.config.epochs - 1:
+            if epoch == self.config.training.epochs - 1:
                 self._save_model("final", val_acc, epoch + 1, current_lr)
 
             if val_acc > best_acc:
@@ -632,7 +642,7 @@ def create_experiment(
 
     target_train_dataset = dataset_class(
         split="train",
-        sampling_frames=config.sampling_frames,
+        sampling_frames=config.data.sampling_frames,
         label_mapper=label_mapper,
         is_target=True,
         logger=logger,
@@ -640,7 +650,7 @@ def create_experiment(
 
     target_val_dataset = dataset_class(
         split="test",
-        sampling_frames=config.sampling_frames,
+        sampling_frames=config.data.sampling_frames,
         label_mapper=label_mapper,
         is_target=True,
         logger=logger,
@@ -667,7 +677,7 @@ def create_experiment(
         dataset_class = get_dataset_class(source_name)
         source_dataset = dataset_class(
             split="train",
-            sampling_frames=config.sampling_frames,
+            sampling_frames=config.data.sampling_frames,
             label_mapper=label_mapper,
             is_target=False,
             logger=logger,
@@ -691,18 +701,18 @@ def create_experiment(
 
     train_loader = DataLoader(
         unified_train_dataset,
-        batch_size=config.batch_size,
+        batch_size=config.data.batch_size,
         shuffle=True,
-        num_workers=config.num_workers,
-        pin_memory=config.pin_memory,
+        num_workers=config.data.num_workers,
+        pin_memory=config.data.pin_memory,
     )
 
     val_loader = DataLoader(
         target_val_dataset,
-        batch_size=config.batch_size,
+        batch_size=config.data.batch_size,
         shuffle=False,
-        num_workers=config.num_workers,
-        pin_memory=config.pin_memory,
+        num_workers=config.data.num_workers,
+        pin_memory=config.data.pin_memory,
     )
 
     num_classes = len(target_train_dataset.label_to_idx)
@@ -735,11 +745,11 @@ def main():
     logger.info("Starting training script")
 
     config = ExperimentConfig(
-        target_dataset="ucf101",
-        # target_dataset="charades",
+        # target_dataset="ucf101",
+        target_dataset="charades",
         # target_dataset="hmdb51",
-        source_datasets=["hmdb51"],
-        # source_datasets=[],
+        # source_datasets=["hmdb51"],
+        source_datasets=[],
         # source_datasets=["ucf101"],
     )
     logger.info(f"Experiment config: {asdict(config)}")
