@@ -7,8 +7,8 @@ import torch
 from torch import nn, optim
 from torch.utils.data import DataLoader, Dataset
 
-from src.ml.config import ExperimentConfig
-from src.ml.datasets import (
+from src.act_recog.config import ExperimentConfig
+from src.act_recog.datasets import (
     ActionRecognitionDataset,
     ActivityNetDataset,
     CharadesDataset,
@@ -17,8 +17,8 @@ from src.ml.datasets import (
     STAIRActionsDataset,
     UCF101Dataset,
 )
-from src.ml.label_mapper import ActionLabelMapper
-from src.ml.models.r2plus1d import R2Plus1DModel
+from src.act_recog.label_mapper import ActionLabelMapper
+from src.act_recog.models.r2plus1d import R2Plus1DModel
 from src.settings import (
     LOGS_DIR,
     METAVD_DIR,

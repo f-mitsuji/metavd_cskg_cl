@@ -1,7 +1,7 @@
 from torch import nn
 from torchvision.models.video import R2Plus1D_18_Weights, r2plus1d_18
 
-from src.ml.models.base import ActionRecognitionModel
+from src.act_recog.models.base import ActionRecognitionModel
 
 
 class R2Plus1DModel(ActionRecognitionModel):

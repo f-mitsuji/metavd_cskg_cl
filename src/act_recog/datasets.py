@@ -9,8 +9,8 @@ from torch.utils.data import Dataset
 from torchvision.io import read_video
 from torchvision.transforms import InterpolationMode, v2
 
-from src.ml.config import VideoInfo
-from src.ml.label_mapper import ActionLabelMapper
+from src.act_recog.config import VideoInfo
+from src.act_recog.label_mapper import ActionLabelMapper
 from src.settings import (
     CHARADES_DIR,
     HMDB51_DIR,
