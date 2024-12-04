@@ -11,11 +11,7 @@ from torchvision.transforms import InterpolationMode, v2
 
 from src.act_recog.config import VideoInfo
 from src.act_recog.label_mapper import ActionLabelMapper
-from src.settings import (
-    CHARADES_DIR,
-    HMDB51_DIR,
-    UCF101_DIR,
-)
+from src.settings import ACTIVITYNET_DIR, CHARADES_DIR, HMDB51_DIR, KINETICS700_DIR, STAIR_ACTIONS_DIR, UCF101_DIR
 
 
 class VideoProcessor:
@@ -163,6 +159,17 @@ class ActivityNetDataset(ActionRecognitionDataset):
     @property
     def dataset_name(self) -> str:
         return "activitynet"
+
+    @property
+    def video_path(self) -> Path:
+        return ACTIVITYNET_DIR
+
+    @property
+    def split_path(self) -> Path:
+        pass
+
+    def _load_class_mapping(self) -> dict[str, str]:
+        pass
 
 
 class CharadesDataset(ActionRecognitionDataset):
@@ -313,16 +320,112 @@ class HMDB51Dataset(ActionRecognitionDataset):
         self.label_to_idx = {label: idx for idx, label in enumerate(unique_labels)}
 
 
-class Kinetics7002020Dataset(ActionRecognitionDataset):
+class Kinetics700Dataset(ActionRecognitionDataset):
     @property
     def dataset_name(self) -> str:
         return "kinetics700"
+
+    @property
+    def video_path(self) -> Path:
+        return KINETICS700_DIR
+
+    @property
+    def split_path(self) -> Path:
+        return KINETICS700_DIR / "annotations"
+
+    def _setup_dataset(self) -> None:
+        if self.split == "test":
+            self.split = "val"
+
+        split_file = self.split_path / f"{self.split}.csv"
+        with split_file.open() as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                label = row["label"]
+                video_id = row["youtube_id"]
+                start_time = row["time_start"]
+                end_time = row["time_end"]
+                video_file = (
+                    self.video_path / self.split / label / f"{video_id}_{start_time.zfill(6)}_{end_time.zfill(6)}.mp4"
+                )
+                if not video_file.exists():
+                    continue
+
+                target_label: str | None = None
+                if self.is_target:
+                    target_label = label
+                else:
+                    if not self.label_mapper:
+                        continue
+                    target_label = self.label_mapper.get_target_label(self.dataset_name, label)
+                    if not target_label:
+                        continue
+
+                video_info = VideoInfo(
+                    path=video_file,
+                    label=target_label,
+                    original_label=label if not self.is_target else None,
+                )
+                self.videos.append(video_info)
+                self.labels.append(target_label)
+                self._log_video_load(
+                    video_file,
+                    target_label,
+                    original_label=video_info.original_label,
+                )
+
+        unique_labels = sorted(set(self.labels))
+        self.label_to_idx = {label: idx for idx, label in enumerate(unique_labels)}
 
 
 class STAIRActionsDataset(ActionRecognitionDataset):
     @property
     def dataset_name(self) -> str:
         return "stair_actions"
+
+    @property
+    def video_path(self) -> Path:
+        return STAIR_ACTIONS_DIR / "train"
+
+    @property
+    def split_path(self) -> Path:
+        return STAIR_ACTIONS_DIR / "data"
+
+    def _setup_dataset(self) -> None:
+        if self.split == "test":
+            self.split = "val"
+        split_file = self.split_path / f"videolist_{self.split}.txt"
+
+        if not split_file.exists():
+            msg = f"Split file not found: {split_file}"
+            raise FileNotFoundError(msg)
+
+        with split_file.open() as f:
+            for line in f:
+                video_path = line.strip().split()[0]
+                class_name = video_path.split("/")[0]
+                target_label: str | None = None
+
+                if self.is_target:
+                    target_label = class_name
+                else:
+                    if not self.label_mapper:
+                        continue
+                    target_label = self.label_mapper.get_target_label(self.dataset_name, class_name)
+                    if not target_label:
+                        continue
+
+                video_file = self.video_path / class_name / video_path.split("/")[-1]
+                if video_file.exists():
+                    video_info = VideoInfo(
+                        path=video_file, label=target_label, original_label=class_name if not self.is_target else None
+                    )
+                    self.videos.append(video_info)
+                    self.labels.append(target_label)
+                    self._log_video_load(video_file, target_label, original_label=video_info.original_label)
+
+        unique_labels = sorted(set(self.labels))
+        self.label_to_idx = {label: idx for idx, label in enumerate(unique_labels)}
 
 
 class UCF101Dataset(ActionRecognitionDataset):
