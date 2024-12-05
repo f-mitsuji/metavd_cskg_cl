@@ -6,6 +6,7 @@ LOGS_DIR = RESULTS_DIR / "logs"
 DATA_DIR = Path("data")
 
 METAVD_DIR = DATA_DIR / "metavd"
+AUTO_METAVD_DIR = RESULTS_DIR / "auto_metavd"
 
 MODELS_DIR = Path("models")
 TRAINED_MODELS_DIR = MODELS_DIR / "trained"
