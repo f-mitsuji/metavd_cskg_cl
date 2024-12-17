@@ -1,9 +1,12 @@
 import csv
+import json
 import logging
+import os
 import random
 from abc import ABC, abstractmethod
 from pathlib import Path
 
+import psutil
 import torch
 from torch.utils.data import Dataset
 from torchvision.io import read_video
@@ -15,10 +18,17 @@ from src.settings import ACTIVITYNET_DIR, CHARADES_DIR, HMDB51_DIR, KINETICS700_
 
 
 class VideoProcessor:
-    def __init__(self, sampling_frames: int, *, is_train: bool):
+    def __init__(self, sampling_frames: int, *, is_train: bool, logger: logging.Logger | None = None):
         self.sampling_frames = sampling_frames
         self.is_train = is_train
+        self.logger = logger
         self.transform = self._create_transforms()
+
+    def log_memory_usage(self, message: str = "") -> None:
+        if self.logger:
+            process = psutil.Process(os.getpid())
+            mem_usage = process.memory_info().rss / (1024 * 1024 * 1024)
+            self.logger.info(f"Memory usage {message}: {mem_usage:.2f} GB")
 
     def _create_transforms(self) -> v2.Compose:
         # R2Plus1D_18_Weights.KINETICS400_V1.transforms()
@@ -32,16 +42,23 @@ class VideoProcessor:
         return v2.Compose(transforms)
 
     def load_video(self, video_info: VideoInfo) -> torch.Tensor:
-        if video_info.start_time is not None and video_info.end_time is not None:
-            video, _, _ = read_video(
-                str(video_info.path),
-                start_pts=video_info.start_time,
-                end_pts=video_info.end_time,
-                pts_unit="sec",
-                output_format="TCHW",
-            )
-        else:
-            video, _, _ = read_video(str(video_info.path), pts_unit="sec", output_format="TCHW")
+        # self.log_memory_usage("Before video load")
+        try:
+            if video_info.start_time is not None and video_info.end_time is not None:
+                video, _, _ = read_video(
+                    str(video_info.path),
+                    start_pts=video_info.start_time,
+                    end_pts=video_info.end_time,
+                    pts_unit="sec",
+                    output_format="TCHW",
+                )
+                # self.log_memory_usage("After video load")
+            else:
+                video, _, _ = read_video(str(video_info.path), pts_unit="sec", output_format="TCHW")
+        except Exception:
+            if self.logger:
+                self.logger.exception(f"Error loading video: {video_info.path}")
+            raise
 
         return self._sample_frames(video)
 
@@ -88,7 +105,7 @@ class ActionRecognitionDataset(Dataset, ABC):
         self.label_to_idx: dict[str, int] = {}
 
         self._setup_dataset()
-        self.video_processor = VideoProcessor(sampling_frames, is_train=self.is_train)
+        self.video_processor = VideoProcessor(sampling_frames, is_train=self.is_train, logger=self.logger)
 
     @property
     @abstractmethod
@@ -166,10 +183,78 @@ class ActivityNetDataset(ActionRecognitionDataset):
 
     @property
     def split_path(self) -> Path:
-        pass
+        return ACTIVITYNET_DIR
 
-    def _load_class_mapping(self) -> dict[str, str]:
-        pass
+    def _find_video_path(self, video_id: str) -> Path | None:
+        video_filename = f"v_{video_id}"
+
+        search_dirs = [
+            self.video_path / "v1-2" / "train",
+            self.video_path / "v1-2" / "val",
+            self.video_path / "v1-3" / "train_val",
+        ]
+
+        for dir_path in search_dirs:
+            if dir_path.exists():
+                for file_path in dir_path.glob(f"{video_filename}*"):
+                    return file_path
+
+        return None
+
+    def _setup_dataset(self) -> None:
+        split_file = self.split_path / "activity_net.v1-3.min.json"
+        with split_file.open() as fobj:
+            data = json.load(fobj)
+        database = data["database"]
+
+        for video_id, video_details in database.items():
+            if self.is_train and video_details["subset"] != "training":
+                continue
+            if not self.is_train and video_details["subset"] != "validation":
+                continue
+
+            video_file = self._find_video_path(video_id)
+            if video_file is None:
+                continue
+
+            segments = []
+            labels = []
+            for annotation in video_details["annotations"]:
+                class_name = annotation["label"].replace(" ", "_")
+                target_label: str | None = None
+
+                if self.is_target:
+                    target_label = class_name
+                else:
+                    if not self.label_mapper:
+                        continue
+                    target_label = self.label_mapper.get_target_label(self.dataset_name, class_name)
+                    if not target_label:
+                        continue
+
+                segments.append(annotation["segment"])
+                labels.append((target_label, class_name))
+
+            for (start_time, end_time), (target_label, class_name) in zip(segments, labels, strict=True):
+                video_info = VideoInfo(
+                    path=video_file,
+                    label=target_label,
+                    original_label=class_name if not self.is_target else None,
+                    start_time=float(start_time),
+                    end_time=float(end_time),
+                )
+                self.videos.append(video_info)
+                self.labels.append(target_label)
+                self._log_video_load(
+                    video_file,
+                    target_label,
+                    original_label=video_info.original_label,
+                    start_time=start_time,
+                    end_time=end_time,
+                )
+
+        unique_labels = sorted(set(self.labels))
+        self.label_to_idx = {label: idx for idx, label in enumerate(unique_labels)}
 
 
 class CharadesDataset(ActionRecognitionDataset):
