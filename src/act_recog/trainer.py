@@ -13,7 +13,7 @@ from src.act_recog.datasets import (
     ActivityNetDataset,
     CharadesDataset,
     HMDB51Dataset,
-    Kinetics7002020Dataset,
+    Kinetics700Dataset,
     STAIRActionsDataset,
     UCF101Dataset,
 )
@@ -164,7 +164,7 @@ class ActionRecognitionTrainer:
             "epoch": epoch,
             "lr": lr,
             "config": asdict(self.config),
-            "timestamp": get_current_jst_timestamp(),
+            "timestamp": timestamp,
             "optimizer": self.optimizer.state_dict(),
             "scheduler": self.scheduler.state_dict() if self.scheduler else None,
         }
@@ -209,7 +209,7 @@ def get_dataset_class(name: str) -> type[ActionRecognitionDataset]:
     dataset_mapping = {
         "activitynet": ActivityNetDataset,
         "charades": CharadesDataset,
-        "kinetics700-2020": Kinetics7002020Dataset,
+        "kinetics700": Kinetics700Dataset,
         "hmdb51": HMDB51Dataset,
         "stair_actions": STAIRActionsDataset,
         "ucf101": UCF101Dataset,
@@ -254,10 +254,11 @@ def create_experiment(
 
     if logger:
         logger.info("\n=== Target Dataset Statistics ===")
-        logger.info(f"Total number of samples: {len(target_train_dataset)}")
+        logger.info(f"Total number of train samples: {len(target_train_dataset)}")
         logger.info("\nSamples per class:")
         for label, count in sorted(target_class_counts.items()):
             logger.info(f"{label}: {count}")
+        logger.info(f"Total number of test samples: {len(target_val_dataset)}")
 
     source_train_datasets = []
     source_class_counts: dict[str, int] = {}
@@ -335,9 +336,11 @@ def main():
     logger.info("Starting training script")
 
     config = ExperimentConfig(
-        # target_dataset="ucf101",
+        target_dataset="activitynet",
+        # target_dataset="stair_actions",
         # target_dataset="charades",
-        target_dataset="hmdb51",
+        # target_dataset="hmdb51",
+        # target_dataset="kinetics700",
         # source_datasets=["hmdb51"],
         source_datasets=[],
         # source_datasets=["ucf101"],
