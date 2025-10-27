@@ -18,10 +18,10 @@ EMBEDDINGS_DIR = DATA_DIR / "embeddings"
 NUMBERBATCH_PATH = EMBEDDINGS_DIR / "numberbatch-en-19.08.txt"
 GOOGLENEWS_PATH = EMBEDDINGS_DIR / "GoogleNews-vectors-negative300.bin"
 
-CN_DICT_DIR = DATA_DIR / "conceptnet"
-CN_EN_LEMMAS_P = CN_DICT_DIR / "concepts_en_lemmas.p"
-CN_DICT2_P = CN_DICT_DIR / "cn_dict2.p"
-CN_DICT2_DB = CN_DICT_DIR / "cn_dict2.db"
+CN_DIR = DATA_DIR / "conceptnet"
+CN_EN_LEMMAS_P = CN_DIR / "concepts_en_lemmas.p"
+CN_DICT2_P = CN_DIR / "cn_dict2.p"
+CN_DICT2_DB = CN_DIR / "cn_dict2.db"
 
 VIDEO_DATASET_DIR = Path("/disk1")
 CHARADES_DIR = VIDEO_DATASET_DIR / "charades"
