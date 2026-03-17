@@ -32,7 +32,6 @@ class UnifiedActionDataset(Dataset):
         self.target_dataset = target_dataset
         self.source_datasets = source_datasets
 
-        # データセットサイズの計算
         self.dataset_sizes = [len(target_dataset)] + [len(ds) for ds in source_datasets]
         self.cumulative_sizes = [0]
         cum_sum = 0
@@ -44,15 +43,12 @@ class UnifiedActionDataset(Dataset):
         return self.cumulative_sizes[-1]
 
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, int]:
-        # どのデータセットからサンプリングするか決定
         dataset_idx = 0
         while idx >= self.cumulative_sizes[dataset_idx + 1]:
             dataset_idx += 1
 
-        # 各データセット内でのインデックスを計算
         relative_idx = idx - self.cumulative_sizes[dataset_idx]
 
-        # データの取得
         if dataset_idx == 0:
             return self.target_dataset[relative_idx]
         return self.source_datasets[dataset_idx - 1][relative_idx]

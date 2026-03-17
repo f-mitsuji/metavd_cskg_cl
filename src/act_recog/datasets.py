@@ -430,26 +430,29 @@ class Kinetics700Dataset(ActionRecognitionDataset):
                 video_id = row["youtube_id"]
                 start_time = row["time_start"]
                 end_time = row["time_end"]
+
                 video_file = (
                     self.video_path / self.split / label / f"{video_id}_{start_time.zfill(6)}_{end_time.zfill(6)}.mp4"
                 )
                 if not video_file.exists():
                     continue
 
+                normalized_label = label.replace(" ", "_")
+
                 target_label: str | None = None
                 if self.is_target:
-                    target_label = label
+                    target_label = normalized_label
                 else:
                     if not self.label_mapper:
                         continue
-                    target_label = self.label_mapper.get_target_label(self.dataset_name, label)
+                    target_label = self.label_mapper.get_target_label(self.dataset_name, normalized_label)
                     if not target_label:
                         continue
 
                 video_info = VideoInfo(
                     path=video_file,
                     label=target_label,
-                    original_label=label if not self.is_target else None,
+                    original_label=normalized_label if not self.is_target else None,
                 )
                 self.videos.append(video_info)
                 self.labels.append(target_label)

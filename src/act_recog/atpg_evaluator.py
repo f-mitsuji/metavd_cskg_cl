@@ -10,7 +10,9 @@ from src.act_recog.config import ExperimentConfig
 from src.act_recog.datasets import ActionRecognitionDataset
 from src.act_recog.label_mapper import ActionLabelMapper
 from src.act_recog.trainer import get_dataset_class
-from src.settings import AUTO_METAVD_DIR, LOGS_DIR, TRAINED_MODELS_DIR
+
+# from src.settings import AUTO_METAVD_DIR, LOGS_DIR, TRAINED_MODELS_DIR
+from src.settings import LOGS_DIR, METAVD_DIR, TRAINED_MODELS_DIR
 from src.utils import get_current_jst_timestamp, setup_logger
 
 
@@ -21,14 +23,14 @@ class ATPGEvaluator:
         device: torch.device,
         label_mapper: ActionLabelMapper,
         target_dataset: str,
-        target_label_to_idx: dict[str, int],  # ターゲットデータセットのオリジナルのラベルマッピング
+        target_label_to_idx: dict[str, int],
         logger: logging.Logger | None = None,
     ):
         self.model = model
         self.device = device
         self.label_mapper = label_mapper
         self.target_dataset = target_dataset
-        self.target_label_to_idx = target_label_to_idx  # ターゲットデータセットのインデックスを保持
+        self.target_label_to_idx = target_label_to_idx
         self.logger = logger
         self.model.eval()
 
@@ -37,7 +39,6 @@ class ATPGEvaluator:
         target_dataset: ActionRecognitionDataset,
         target_loader: DataLoader,
     ) -> float:
-        """ターゲットデータセットでの分類精度を計算"""
         correct = 0
         total = 0
 
@@ -61,7 +62,6 @@ class ATPGEvaluator:
         source_dataset: ActionRecognitionDataset,
         dataloader: DataLoader,
     ) -> dict[str, dict[str, float]]:
-        """AXに対応するBYラベルの動画について、AXと予測される割合を計算"""
         if self.logger:
             self.logger.info("Target dataset label mapping:")
             for label, idx in sorted(self.target_label_to_idx.items()):
@@ -81,7 +81,6 @@ class ATPGEvaluator:
                 self.logger.info(f"  {label} <- {count} videos")
 
         with torch.no_grad():
-            # バッチ内のインデックスを追跡
             total_processed = 0
 
             for videos, _ in dataloader:
@@ -89,9 +88,7 @@ class ATPGEvaluator:
                 outputs = self.model(videos)
                 pred_indices = outputs.argmax(dim=1)
 
-                # このバッチの各ビデオについて
                 for i in range(len(videos)):
-                    # 全体のインデックスを計算
                     global_idx = total_processed + i
                     if global_idx >= len(source_dataset.videos):
                         break
@@ -100,12 +97,10 @@ class ATPGEvaluator:
                     source_label = video_info.original_label
                     source_dataset_name = source_dataset.dataset_name
 
-                    # ターゲットラベルの取得
                     target_label = self.label_mapper.get_target_label(source_dataset_name, source_label)
                     if target_label is None:
                         continue
 
-                    # デバッグ出力
                     if (
                         self.logger
                         and len(predictions_per_label[target_label][(source_dataset_name, source_label)]) == 0
@@ -116,7 +111,6 @@ class ATPGEvaluator:
                         self.logger.info(f"  Predicted index: {pred_indices[i].item()}")
                         self.logger.info(f"  Expected index: {self.target_label_to_idx[target_label]}")
 
-                    # 予測の正誤判定
                     is_correct = pred_indices[i].item() == self.target_label_to_idx[target_label]
                     predictions_per_label[target_label][(source_dataset_name, source_label)].append(is_correct)
 
@@ -132,7 +126,6 @@ class ATPGEvaluator:
                         f"{sum(predictions)} correct"
                     )
 
-        # Precisionの計算
         precision_scores = {}
         for target_label, source_predictions in predictions_per_label.items():
             precision_scores[target_label] = {}
@@ -153,13 +146,10 @@ class ATPGEvaluator:
         self,
         source_dataset: ActionRecognitionDataset,
         target_dataset: ActionRecognitionDataset,
-        tau_ratio: float = 0.8,  # 目標精度の何割をτとするか
+        tau_ratio: float = 0.8,
     ) -> dict[str, float]:
-        """Average Transferred Precision Gainの計算"""
-        # ターゲットデータセットのローダーを作成
         target_loader = DataLoader(target_dataset, batch_size=32, shuffle=False, num_workers=4, pin_memory=True)
 
-        # ターゲットデータセットでの精度を計算
         target_accuracy = self.calculate_target_accuracy(target_dataset, target_loader)
 
         # τを設定（精度の80%）
@@ -167,13 +157,10 @@ class ATPGEvaluator:
         if self.logger:
             self.logger.info(f"Setting tau to {tau:.3f} (target accuracy: {target_accuracy:.3f} × {tau_ratio})")
 
-        # ソースデータセットのローダーを作成
         source_loader = DataLoader(source_dataset, batch_size=32, shuffle=False, num_workers=4, pin_memory=True)
 
-        # 各ラベルペアのPrecisionを計算
         precision_scores = self.calculate_precision(source_dataset, source_loader)
 
-        # ATPGの計算
         atpg_scores = {}
         for target_label, source_precisions in precision_scores.items():
             gains = []
@@ -181,7 +168,7 @@ class ATPGEvaluator:
                 gain = max(precision - tau, 0)
                 gains.append(gain)
 
-            if gains:  # S(AX)が空でない場合
+            if gains:
                 atpg_score = sum(gains) / len(gains)
                 atpg_scores[target_label] = atpg_score
 
@@ -194,38 +181,35 @@ class ATPGEvaluator:
 def evaluate_model(
     model_path: Path, config: ExperimentConfig, logger: logging.Logger | None = None
 ) -> dict[str, dict[str, float]]:
-    """モデルの評価を実行"""
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if logger:
         logger.info(f"Using device: {device}")
 
-    # モデルのロード
     if logger:
         logger.info(f"Loading model from {model_path}")
     checkpoint = torch.load(model_path, map_location=device)
 
-    # チェックポイントからfc層の正しいサイズを取得
     num_classes = checkpoint["model"]["fc.weight"].size(0)
     model = r2plus1d_18()
     model.fc = torch.nn.Linear(model.fc.in_features, num_classes)
     model.load_state_dict(checkpoint["model"])
     model = model.to(device)
 
-    # ラベルマッパーの初期化
-    label_mapper = ActionLabelMapper(AUTO_METAVD_DIR / "auto_metavd.csv")
+    # label_mapper = ActionLabelMapper(AUTO_METAVD_DIR / "auto_metavd.csv")
+    label_mapper = ActionLabelMapper(METAVD_DIR / "metavd_v1.csv")
     label_mapper.load_mapping(config.target_dataset)
+    print(label_mapper.mapping)
+    # sys.exit(0)
 
-    # ターゲットデータセットの準備
     target_dataset_class = get_dataset_class(config.target_dataset)
     target_dataset = target_dataset_class(
         split="test",
         sampling_frames=config.data.sampling_frames,
-        label_mapper=None,  # オリジナルのラベルを使用
+        label_mapper=None,
         is_target=True,
         logger=logger,
     )
 
-    # 評価器の初期化
     evaluator = ATPGEvaluator(
         model=model,
         device=device,
@@ -235,7 +219,6 @@ def evaluate_model(
         logger=logger,
     )
 
-    # ソースデータセットごとにATPGを計算
     results = {}
     for source_name in config.source_datasets:
         if logger:
@@ -270,16 +253,27 @@ def main():
     logger.info("Starting ATPG evaluation")
 
     config = ExperimentConfig(
-        # target_dataset="hmdb51",
-        target_dataset="ucf101",
-        # source_datasets=["ucf101", "kinetics700", "charades", "stair_actions"],
-        source_datasets=["hmdb51", "kinetics700", "charades", "stair_actions"],
-        # source_datasets=["ucf101,"]
+        target_dataset="hmdb51",
+        # target_dataset="ucf101",
+        # target_dataset="stair_actions",
+        # target_dataset="activitynet",
+        # target_dataset="charades",
+        # source_datasets=["ucf101", "kinetics700", "charades", "stair_actions", "activitynet"],  # hmdb51
+        # source_datasets=["hmdb51", "kinetics700", "charades", "stair_actions", "activitynet"],  # ucf101
+        # source_datasets=["hmdb51", "ucf101", "kinetics700", "charades", "activitynet"],  # stair_actions
+        # source_datasets=["hmdb51", "ucf101", "kinetics700", "charades", "stair_actions"],  # activitynet
+        # source_datasets=["hmdb51", "ucf101", "kinetics700", "activitynet", "stair_actions"], # charades
+        source_datasets=["ucf101,"],
     )
 
     model_path = (
-        # TRAINED_MODELS_DIR / "hmdb51_from_no_source_e45_lr1_0000000000000002e-06_acc67_65_20241130_201818_final.pth"
-        TRAINED_MODELS_DIR / "ucf101_from_no_source_e45_lr1_0000000000000002e-06_acc91_88_20241201_194619_final.pth"
+        TRAINED_MODELS_DIR / "hmdb51_from_no_source_e45_lr1_0000000000000002e-06_acc67_65_20241130_201818_final.pth"
+        # TRAINED_MODELS_DIR / "ucf101_from_no_source_e45_lr1_0000000000000002e-06_acc91_88_20241201_194619_final.pth"
+        # TRAINED_MODELS_DIR
+        # / "stair_actions_from_no_source_e45_lr1_0000000000000002e-06_acc83_62_20241211_082208_final.pth"
+        # TRAINED_MODELS_DIR
+        # / "activitynet_from_no_source_e45_lr1_0000000000000002e-06_acc66_78_20250131_221626_final.pth"
+        # TRAINED_MODELS_DIR / "charades_from_no_source_e45_lr1_0000000000000002e-06_acc9_81_20241111_002737_final.pth"
     )
     results = evaluate_model(model_path=model_path, config=config, logger=logger)
 

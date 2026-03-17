@@ -15,8 +15,9 @@ class TrainingConfig:
 class DataConfig:
     sampling_frames: int = 16
     batch_size: int = 32
+    # num_workers: int = 2  # ActivityNetで16にするとメモリが足りなくなる
     num_workers: int = 16
-    pin_memory: bool = True
+    pin_memory: bool = False
 
 
 @dataclass(frozen=True)
